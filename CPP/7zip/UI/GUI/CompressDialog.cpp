@@ -25,6 +25,7 @@
 #include "../Common/ZipRegistry.h"
 
 #include "CompressDialog.h"
+#include "FormatOptionsDialog.h"
 
 #ifndef _UNICODE
 extern bool g_IsNT;
@@ -491,6 +492,12 @@ bool CCompressDialog::OnInit()
 
   m_Volume.Attach(GetItem(IDC_COMPRESS_VOLUME));
   m_Params.Attach(GetItem(IDE_COMPRESS_PARAMETERS));
+  {
+    GetClientRectOfItem(IDE_COMPRESS_PARAMETERS, _paramsRect);
+    RECT r;
+    GetClientRectOfItem(IDB_COMPRESS_FORMAT_OPTIONS, r);
+    _paramsRight_Full = r.right;
+  }
 
   AddVolumeItems(m_Volume);
 
@@ -611,6 +618,19 @@ bool CCompressDialog::OnButtonClicked(unsigned buttonID, HWND buttonHWND)
         ShowOptionsString();
       return true;
     }
+   #ifdef Z7_EXTERNAL_CODECS
+    case IDB_COMPRESS_FORMAT_OPTIONS:
+    {
+      CObjectVector<CFormatOption> options;
+      if (!ParseFormatOptions(Get_ArcInfoEx().FormatOptions, options) || options.IsEmpty())
+        return true;
+      CFormatOptionsDialog dialog(&options);
+      m_Params.GetText(dialog.Params);
+      if (dialog.Create(*this) == IDOK)
+        m_Params.SetText(dialog.Params);
+      return true;
+    }
+   #endif
   }
   return CModalDialog::OnButtonClicked(buttonID, buttonHWND);
 }
@@ -700,6 +720,7 @@ void CCompressDialog::FormatChanged(bool isChanged)
   SetLevel();
   SetSolidBlockSize();
   SetParams();
+  ShowFormatOptionsButton();
   SetMemUseCombo();
   SetNumThreads();
 
@@ -3251,6 +3272,20 @@ void CCompressDialog::SetParams()
     const NCompression::CFormatOptions &fo = m_RegistryInfo.Formats[index];
     m_Params.SetText(fo.Options);
   }
+}
+
+void CCompressDialog::ShowFormatOptionsButton()
+{
+  bool show = false;
+ #ifdef Z7_EXTERNAL_CODECS
+  CObjectVector<CFormatOption> options;
+  show = ParseFormatOptions(Get_ArcInfoEx().FormatOptions, options) && !options.IsEmpty();
+ #endif
+  ShowItem_Bool(IDB_COMPRESS_FORMAT_OPTIONS, show);
+  RECT r = _paramsRect;
+  if (!show)
+    r.right = _paramsRight_Full;
+  MoveItem_RECT(IDE_COMPRESS_PARAMETERS, r);
 }
 
 void CCompressDialog::SaveOptionsInMem()

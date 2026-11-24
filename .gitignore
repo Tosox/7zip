@@ -1,0 +1,4 @@
+# nmake output folders (PLATFORM=x64 / x86 / arm64)
+x64/
+x86/
+arm64/

@@ -48,6 +48,7 @@ UI_COMMON_OBJS = \
   $O\EnumDirItems.obj \
   $O\Extract.obj \
   $O\ExtractingFilePath.obj \
+  $O\FormatOptions.obj \
   $O\HashCalc.obj \
   $O\LoadCodecs.obj \
   $O\OpenArchive.obj \
@@ -73,6 +74,7 @@ GUI_OBJS = \
   $O\CompressDialog.obj \
   $O\ExtractDialog.obj \
   $O\ExtractGUI.obj \
+  $O\FormatOptionsDialog.obj \
   $O\HashGUI.obj \
   $O\UpdateCallbackGUI.obj \
   $O\UpdateCallbackGUI2.obj \

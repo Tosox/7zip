@@ -1,0 +1,71 @@
+name: Windows Build (fork)
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ '*-fork.*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: cmd
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC (x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Format options self-test
+        working-directory: CPP/7zip/UI/Common
+        run: |
+          mkdir %RUNNER_TEMP%\fotest
+          cl -nologo -EHsc -W4 -WX -Fo%RUNNER_TEMP%\fotest\ -Fe%RUNNER_TEMP%\fotest\FormatOptionsTest.exe FormatOptionsTest.cpp FormatOptions.cpp ..\..\..\Common\MyString.cpp ..\..\..\Common\IntToString.cpp user32.lib oleaut32.lib || exit /b 1
+          %RUNNER_TEMP%\fotest\FormatOptionsTest.exe
+
+      # UI\FileManager (not Bundles\Fm) is the 7zFM.exe that loads external format plugins
+      - name: Build 7z.dll, 7z.exe, 7zFM.exe, 7zG.exe, 7-zip.dll
+        run: |
+          for %%D in (Bundles\Format7zF UI\Console UI\FileManager UI\GUI UI\Explorer) do (
+            pushd CPP\7zip\%%D || exit /b 1
+            nmake /nologo PLATFORM=x64 || exit /b 1
+            popd
+          )
+
+      - name: Package
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { $ver = $env:GITHUB_REF_NAME }
+          else { $ver = (Select-String -Path C/7zVersion.h -Pattern '#define MY_VERSION_NUMBERS "(.+)"').Matches[0].Groups[1].Value + "-dev" }
+          $name = "7zip-$ver-x64"
+          $dir = "package/$name"
+          New-Item -ItemType Directory -Force "$dir/Formats" | Out-Null
+          Copy-Item CPP/7zip/Bundles/Format7zF/x64/7z.dll, CPP/7zip/UI/Console/x64/7z.exe, `
+                    CPP/7zip/UI/FileManager/x64/7zFM.exe, CPP/7zip/UI/GUI/x64/7zG.exe, `
+                    CPP/7zip/UI/Explorer/x64/7-zip.dll $dir
+          Copy-Item DOC/License.txt, DOC/readme.txt, DOC/format-options.md, README.md $dir
+          Set-Content "$dir/Formats/put-format-plugins-here.txt" "Copy format plugin DLLs (for example XDB_x64.dll) into this folder."
+          Compress-Archive -Path "$dir/*" -DestinationPath "package/$name.zip"
+          "PACKAGE=package/$name.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 7zip-fork-x64
+          path: ${{ env.PACKAGE }}
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.PACKAGE }}

@@ -122,6 +122,7 @@ struct CArcInfoEx
     int LibIndex;
     UInt32 FormatIndex;
     CLSID ClassID;
+    UString FormatOptions; // schema text from the DLL's optional GetFormatOptions() export
   #endif
 
   int Compare(const CArcInfoEx &a) const

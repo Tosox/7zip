@@ -319,6 +319,10 @@ public:
     EnableMultiCombo(IDC_COMPRESS_THREADS);
   }
 
+  RECT _paramsRect;      // Parameters edit next to the "Format options" button
+  LONG _paramsRight_Full; // right edge of the edit when the button is hidden
+  void ShowFormatOptionsButton();
+
   int AddMemComboItem(UInt64 val, bool isPercent = false, bool isDefault = false);
   void SetMemUseCombo();
   UString Get_MemUse_Spec();
