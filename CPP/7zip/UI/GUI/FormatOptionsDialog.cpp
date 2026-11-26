@@ -35,10 +35,11 @@ static bool GetBoolDefault(const CFormatOption &o)
 }
 
 // Returns the value from the last token with this option's name, or the option's default.
-static UString GetInitialValue(const CFormatOption &o, const UStringVector &tokens, bool &found)
+// (tokenIndex) is that token's index, or -1.
+static UString GetInitialValue(const CFormatOption &o, const UStringVector &tokens, int &tokenIndex)
 {
   UString value = o.Default;
-  found = false;
+  tokenIndex = -1;
   FOR_VECTOR (i, tokens)
   {
     UString name, v;
@@ -46,10 +47,25 @@ static UString GetInitialValue(const CFormatOption &o, const UStringVector &toke
     if (name.IsEqualTo_NoCase(o.Name))
     {
       value = v;
-      found = true;
+      tokenIndex = (int)i;
     }
   }
   return value;
+}
+
+// The selection of an enum, the check of a bool; text controls show any value.
+int CFormatOptionsDialog::GetControlState(unsigned index)
+{
+  const CFormatOption &o = (*_options)[index];
+  if (o.Type == NFormatOptionType::kBool)
+    return IsButtonCheckedBool(kFirstId + index * 2) ? 1 : 0;
+  if (o.Type == NFormatOptionType::kEnum)
+  {
+    NControl::CComboBox combo;
+    combo.Attach(_controls[index]);
+    return combo.GetCurSel();
+  }
+  return -1;
 }
 
 RECT CFormatOptionsDialog::DluRect(int x, int y, int width, int height)
@@ -93,13 +109,17 @@ bool CFormatOptionsDialog::OnInit()
     ::SendMessageW(tooltip, TTM_SETMAXTIPWIDTH, 0, 400);
 
   _controls.Clear();
+  _keptTokens.Clear();
+  _initialStates.Clear();
   FOR_VECTOR (i, options)
   {
     const CFormatOption &o = options[i];
     const int y = kMargin + (int)i * kRowHeight;
     const unsigned id = kFirstId + i * 2;
-    bool found;
-    const UString value = GetInitialValue(o, tokens, found);
+    int tokenIndex;
+    const UString value = GetInitialValue(o, tokens, tokenIndex);
+    const bool found = (tokenIndex >= 0);
+    bool shown = true;
     HWND ctrl = NULL;
 
     if (o.Type == NFormatOptionType::kBool)
@@ -108,7 +128,10 @@ bool CFormatOptionsDialog::OnInit()
           DluRect(kMargin, y + 2, kContentWidth, 10), id);
       bool b = GetBoolDefault(o);
       if (found && !StringToBool(value, b))
+      {
         b = GetBoolDefault(o);
+        shown = false;
+      }
       CheckButton(id, b);
     }
     else
@@ -124,12 +147,17 @@ bool CFormatOptionsDialog::OnInit()
             DluRect(kControlX, y, kControlWidth, kComboListHeight), id);
         NControl::CComboBox combo;
         combo.Attach(ctrl);
-        int sel = 0;
+        int sel = -1;
         FOR_VECTOR (k, o.Values)
         {
           combo.AddString(o.Labels.IsEmpty() ? o.Values[k] : o.Labels[k]);
           if (o.Values[k].IsEqualTo_NoCase(value))
             sel = (int)k;
+        }
+        if (sel < 0)
+        {
+          shown = !found;
+          sel = 0;
         }
         combo.SetCurSel(sel);
       }
@@ -149,6 +177,8 @@ bool CFormatOptionsDialog::OnInit()
     }
 
     _controls.Add(ctrl);
+    _keptTokens.Add(shown ? UString() : tokens[(unsigned)tokenIndex]);
+    _initialStates.Add(GetControlState(i));
 
     if (tooltip && ctrl && !o.Tip.IsEmpty())
     {
@@ -248,6 +278,15 @@ void CFormatOptionsDialog::OnOK()
   {
     const CFormatOption &o = options[i];
     const unsigned id = kFirstId + i * 2;
+
+    // A value the control couldn't show stays as typed, so the format DLL
+    // still sees (and can reject) it, unless the user picked another one.
+    if (!_keptTokens[i].IsEmpty() && GetControlState(i) == _initialStates[i])
+    {
+      AppendOptionToken(result, _keptTokens[i]);
+      continue;
+    }
+
     UString value;
     bool isDefault;
 

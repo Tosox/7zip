@@ -15,11 +15,16 @@ class CFormatOptionsDialog: public NWindows::NControl::CModalDialog
 {
   const CObjectVector<CFormatOption> *_options;
   CRecordVector<HWND> _controls; // one input control per option
+  // Per option: a token from Parameters whose value its control can't show (empty if none),
+  // and the control's state when the dialog opened. The token is kept unless the control changes.
+  UStringVector _keptTokens;
+  CIntVector _initialStates;
   HWND _lastControl;
   HFONT _font;
 
   RECT DluRect(int x, int y, int width, int height);
   HWND AddControl(LPCWSTR className, LPCWSTR text, DWORD style, DWORD exStyle, const RECT &r, unsigned id);
+  int GetControlState(unsigned index);
   void Browse(unsigned index);
 
   virtual bool OnInit() Z7_override;

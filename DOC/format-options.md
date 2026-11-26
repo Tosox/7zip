@@ -78,6 +78,8 @@ The dialog only edits the *Parameters* text, so values arrive through the normal
   The fork strips the quotes, so the plugin receives the plain value.
   Stock 7-Zip does not: it splits *Parameters* at every space.
 - Tokens in *Parameters* that the schema does not know are kept as they are.
+- So is a value that a `bool` or `enum` control can't show (`dbver=9999`, `flag=yes`),
+  unless the user changes that control, so the plugin can still reject or accept it.
 
 The values are remembered per format together with the rest of *Parameters*.
 
