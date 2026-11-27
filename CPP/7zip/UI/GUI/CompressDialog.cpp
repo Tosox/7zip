@@ -8,6 +8,7 @@
 #include "../../../Common/StringConvert.h"
 
 #include "../../../Windows/FileDir.h"
+#include "../../../Windows/FileFind.h"
 #include "../../../Windows/FileName.h"
 #include "../../../Windows/System.h"
 
@@ -25,6 +26,7 @@
 #include "../Common/ZipRegistry.h"
 
 #include "CompressDialog.h"
+#include "FormatOptionsDialog.h"
 
 #ifndef _UNICODE
 extern bool g_IsNT;
@@ -491,6 +493,12 @@ bool CCompressDialog::OnInit()
 
   m_Volume.Attach(GetItem(IDC_COMPRESS_VOLUME));
   m_Params.Attach(GetItem(IDE_COMPRESS_PARAMETERS));
+  {
+    GetClientRectOfItem(IDE_COMPRESS_PARAMETERS, _paramsRect);
+    RECT r;
+    GetClientRectOfItem(IDB_COMPRESS_FORMAT_OPTIONS, r);
+    _paramsRight_Full = r.right;
+  }
 
   AddVolumeItems(m_Volume);
 
@@ -611,6 +619,23 @@ bool CCompressDialog::OnButtonClicked(unsigned buttonID, HWND buttonHWND)
         ShowOptionsString();
       return true;
     }
+   #ifdef Z7_EXTERNAL_CODECS
+    case IDB_COMPRESS_FORMAT_OPTIONS:
+    {
+      CObjectVector<CFormatOption> options;
+      if (!ParseFormatOptions(Get_ArcInfoEx().FormatOptions, options) || options.IsEmpty())
+        return true;
+      // Checked when the button is pressed; a later change of the name doesn't update it.
+      UString arcPath;
+      if (GetFinalPath_Smart(arcPath) && !NFind::DoesFileOrDirExist(us2fs(arcPath)))
+        ApplyNewArchive(options);
+      CFormatOptionsDialog dialog(&options);
+      m_Params.GetText(dialog.Params);
+      if (dialog.Create(*this) == IDOK)
+        m_Params.SetText(dialog.Params);
+      return true;
+    }
+   #endif
   }
   return CModalDialog::OnButtonClicked(buttonID, buttonHWND);
 }
@@ -700,8 +725,10 @@ void CCompressDialog::FormatChanged(bool isChanged)
   SetLevel();
   SetSolidBlockSize();
   SetParams();
+  ShowFormatOptionsButton();
   SetMemUseCombo();
   SetNumThreads();
+  DisableIgnoredSettings();
 
   const CFormatInfo &fi = g_Formats[GetStaticFormatIndex()];
   Info.SolidIsSpecified = fi.Solid_();
@@ -3138,6 +3165,7 @@ void CCompressDialog::SetMemoryUsage()
   const UInt64 memUsage = GetMemoryUsage_DecompMem(decompressMem);
   PrintMemUsage(IDT_COMPRESS_MEMORY_VALUE, memUsage);
   PrintMemUsage(IDT_COMPRESS_MEMORY_DE_VALUE, decompressMem);
+  EnableComboLabels(); // this runs last after any change to the format or the combo boxes
  #ifdef PRINT_PARAMS
   Print_Params();
  #endif
@@ -3251,6 +3279,76 @@ void CCompressDialog::SetParams()
     const NCompression::CFormatOptions &fo = m_RegistryInfo.Formats[index];
     m_Params.SetText(fo.Options);
   }
+}
+
+void CCompressDialog::ShowFormatOptionsButton()
+{
+  bool show = false;
+ #ifdef Z7_EXTERNAL_CODECS
+  CObjectVector<CFormatOption> options;
+  show = ParseFormatOptions(Get_ArcInfoEx().FormatOptions, options) && !options.IsEmpty();
+ #endif
+  ShowItem_Bool(IDB_COMPRESS_FORMAT_OPTIONS, show);
+  RECT r = _paramsRect;
+  if (!show)
+    r.right = _paramsRight_Full;
+  MoveItem_RECT(IDE_COMPRESS_PARAMETERS, r);
+}
+
+// The format's schema can list settings that the plugin doesn't use (DOC/format-options.md).
+bool CCompressDialog::FormatIgnores(const char *setting)
+{
+ #ifdef Z7_EXTERNAL_CODECS
+  CObjectVector<CFormatOption> options;
+  UStringVector ignore;
+  if (ParseFormatOptions(Get_ArcInfoEx().FormatOptions, options, &ignore))
+    FOR_VECTOR (i, ignore)
+      if (ignore[i].IsEqualTo_Ascii_NoCase(setting))
+        return true;
+ #else
+  UNUSED_VAR(setting)
+ #endif
+  return false;
+}
+
+// Greys out the settings the format ignores; their values are still passed, as for other formats.
+void CCompressDialog::DisableIgnoredSettings()
+{
+  EnableItem(IDC_COMPRESS_LEVEL, !FormatIgnores("level"));
+
+  const bool threads = !FormatIgnores("threads");
+  EnableItem(IDC_COMPRESS_THREADS, threads);
+  EnableItem(IDT_COMPRESS_HARDWARE_THREADS, threads);
+
+  const bool memory = !FormatIgnores("memory");
+  EnableItem(IDT_COMPRESS_MEMORY_VALUE, memory);
+  EnableItem(IDT_COMPRESS_MEMORY_DE, memory);
+  EnableItem(IDT_COMPRESS_MEMORY_DE_VALUE, memory);
+  EnableItem(IDC_COMPRESS_MEM_USE, memory && g_Formats[GetStaticFormatIndex()].MemUse_());
+
+  // Volumes are made by 7-Zip, not by the plugin, so a disabled size must not be used.
+  const bool volumes = !FormatIgnores("volumes");
+  EnableItem(IDT_SPLIT_TO_VOLUMES, volumes);
+  EnableItem(IDC_COMPRESS_VOLUME, volumes);
+  if (!volumes)
+    m_Volume.SetText(TEXT(""));
+}
+
+// Greys out the label of each disabled combo box, such as Compression method for a format without methods.
+void CCompressDialog::EnableComboLabels()
+{
+  static const unsigned k_Pairs[][2] =
+  {
+    { IDT_COMPRESS_LEVEL,      IDC_COMPRESS_LEVEL },
+    { IDT_COMPRESS_METHOD,     IDC_COMPRESS_METHOD },
+    { IDT_COMPRESS_DICTIONARY, IDC_COMPRESS_DICTIONARY },
+    { IDT_COMPRESS_ORDER,      IDC_COMPRESS_ORDER },
+    { IDT_COMPRESS_SOLID,      IDC_COMPRESS_SOLID },
+    { IDT_COMPRESS_THREADS,    IDC_COMPRESS_THREADS },
+    { IDT_COMPRESS_MEMORY,     IDC_COMPRESS_MEM_USE }
+  };
+  for (unsigned i = 0; i < Z7_ARRAY_SIZE(k_Pairs); i++)
+    EnableItem(k_Pairs[i][0], IsWindowEnabled(GetItem(k_Pairs[i][1])) != FALSE);
 }
 
 void CCompressDialog::SaveOptionsInMem()

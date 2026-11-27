@@ -711,6 +711,8 @@ extern "C"
   typedef HRESULT (WINAPI *Func_GetNumberOfFormats)(UInt32 *numFormats);
   typedef HRESULT (WINAPI *Func_GetHandlerProperty)(PROPID propID, PROPVARIANT *value);
   typedef HRESULT (WINAPI *Func_GetHandlerProperty2)(UInt32 index, PROPID propID, PROPVARIANT *value);
+  // optional export of external format DLLs: VT_BSTR options schema (DOC/format-options.md) or VT_EMPTY
+  typedef HRESULT (WINAPI *Func_GetFormatOptions)(UInt32 formatIndex, PROPVARIANT *value);
 
   typedef HRESULT (WINAPI *Func_SetCaseSensitive)(Int32 caseSensitive);
   typedef HRESULT (WINAPI *Func_SetLargePageMode)();

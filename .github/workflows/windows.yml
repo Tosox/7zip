@@ -1,0 +1,119 @@
+name: Windows Build (fork)
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ '*-fork.*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: cmd
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # A tag such as 26.06-fork.3 names the release; its suffix goes into the version strings.
+      - name: Version
+        shell: pwsh
+        run: |
+          $header = "C/7zVersion.h"
+          $numbers = (Select-String -Path $header -Pattern '#define MY_VERSION_NUMBERS "(.+)"').Matches[0].Groups[1].Value
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $ver = $env:GITHUB_REF_NAME
+            if ($ver -notmatch "^$([regex]::Escape($numbers))(-fork\.\d+)$") { throw "tag $ver doesn't match 7-Zip $numbers (expected $numbers-fork.N)" }
+            $suffix = $Matches[1]
+            (Get-Content $header -Raw) -replace '(#define MY_VERSION MY_VERSION_NUMBERS )"[^"]*"', "`$1`"$suffix`"" | Set-Content $header -NoNewline
+          }
+          else { $ver = "$numbers-dev" }
+          "VERSION=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "UPSTREAM=7z$($numbers -replace '\.', '')-x64.exe" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Select-String -Path $header -Pattern '#define MY_VERSION '
+
+      - name: Set up MSVC (x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Format options self-test
+        working-directory: CPP/7zip/UI/Common
+        run: |
+          mkdir %RUNNER_TEMP%\fotest
+          cl -nologo -EHsc -W4 -WX -Fo%RUNNER_TEMP%\fotest\ -Fe%RUNNER_TEMP%\fotest\FormatOptionsTest.exe FormatOptionsTest.cpp FormatOptions.cpp ..\..\..\Common\MyString.cpp ..\..\..\Common\IntToString.cpp user32.lib oleaut32.lib || exit /b 1
+          %RUNNER_TEMP%\fotest\FormatOptionsTest.exe
+
+      # UI\FileManager (not Bundles\Fm) is the 7zFM.exe that loads external format plugins
+      - name: Build 7z.dll, 7z.exe, 7zFM.exe, 7zG.exe, 7-zip.dll
+        run: |
+          for %%D in (Bundles\Format7zF UI\Console UI\FileManager UI\GUI UI\Explorer) do (
+            pushd CPP\7zip\%%D || exit /b 1
+            nmake /nologo PLATFORM=x64 || exit /b 1
+            popd
+          )
+
+      # The rest of 7-Zip's x64 setup is 32-bit, as in the official one: the installer and
+      # uninstaller (which install 64-bit 7-Zip), the SFX modules and 7-zip32.dll.
+      - name: Set up MSVC (x86)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+
+      - name: Build the installer, uninstaller, 7z.sfx, 7zCon.sfx and 7-zip32.dll
+        run: |
+          for %%D in (C\Util\7zipInstall C\Util\7zipUninstall) do (
+            pushd %%D || exit /b 1
+            nmake /nologo PLATFORM=x86 Z7_64BIT_INSTALLER=1 || exit /b 1
+            popd
+          )
+          for %%D in (Bundles\SFXWin Bundles\SFXCon UI\Explorer) do (
+            pushd CPP\7zip\%%D || exit /b 1
+            nmake /nologo PLATFORM=x86 || exit /b 1
+            popd
+          )
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $ver = $env:VERSION
+          $name = "7zip-$ver-x64"
+          $dir = "package/$name"
+          New-Item -ItemType Directory -Force "$dir/Formats" | Out-Null
+          Copy-Item CPP/7zip/Bundles/Format7zF/x64/7z.dll, CPP/7zip/UI/Console/x64/7z.exe, `
+                    CPP/7zip/UI/FileManager/x64/7zFM.exe, CPP/7zip/UI/GUI/x64/7zG.exe, `
+                    CPP/7zip/UI/Explorer/x64/7-zip.dll $dir
+          Copy-Item DOC/License.txt, DOC/readme.txt, README.md $dir
+          Set-Content "$dir/Formats/put-format-plugins-here.txt" "Copy format plugin DLLs into this folder."
+          Compress-Archive -Path "$dir/*" -DestinationPath "package/$name.zip"
+          "PACKAGE=package/$name.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      # The language files and the help come from the official setup of the same version.
+      - name: Installer
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://www.7-zip.org/a/$env:UPSTREAM" -OutFile "$env:RUNNER_TEMP/$env:UPSTREAM"
+          $setup = ./.github/make-installer.ps1 -Version $env:VERSION -Upstream "$env:RUNNER_TEMP/$env:UPSTREAM" -OutDir package
+          "SETUP=$setup" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 7zip-fork-x64
+          path: |
+            ${{ env.PACKAGE }}
+            ${{ env.SETUP }}
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.SETUP }}
+            ${{ env.PACKAGE }}

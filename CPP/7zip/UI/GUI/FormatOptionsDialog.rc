@@ -1,0 +1,13 @@
+#include "FormatOptionsDialogRes.h"
+#include "../../GuiCommon.rc"
+
+// Controls are created at runtime from the format's schema (FormatOptionsDialog.cpp).
+// The width here must match kContentWidth there.
+#define xc 272
+#define yc 24
+
+IDD_FORMAT_OPTIONS  DIALOG  0, 0, xs, ys  MY_MODAL_DIALOG_STYLE  MY_FONT
+CAPTION "Format Options"
+BEGIN
+  OK_CANCEL
+END

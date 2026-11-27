@@ -412,7 +412,8 @@ HRESULT CCodecs::LoadFormats()
   Func_GetHandlerProperty getProp = NULL;
   MY_GET_FUNC_LOC (getProp2, Func_GetHandlerProperty2, lib, "GetHandlerProperty2")
   MY_GET_FUNC_LOC (getIsArc, Func_GetIsArc, lib, "GetIsArc")
-  
+  MY_GET_FUNC_LOC (getFormatOptions, Func_GetFormatOptions, lib, "GetFormatOptions")
+
   UInt32 numFormats = 1;
 
   if (getProp2)
@@ -494,6 +495,13 @@ HRESULT CCodecs::LoadFormats()
 
     if (getIsArc)
       getIsArc(i, &item.IsArcFunc);
+
+    if (getFormatOptions)
+    {
+      NCOM::CPropVariant prop;
+      if (getFormatOptions(i, &prop) == S_OK && prop.vt == VT_BSTR)
+        item.FormatOptions = prop.bstrVal;
+    }
 
     Formats.Add(item);
   }

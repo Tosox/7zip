@@ -103,7 +103,9 @@ BEGIN
   COMBOBOX  IDC_COMPRESS_VOLUME, m, 237, gSize, 73, MY_COMBO_WITH_EDIT
 
   LTEXT     "Parameters:", IDT_COMPRESS_PARAMETERS, m, 256, gSize, 8
-  EDITTEXT  IDE_COMPRESS_PARAMETERS, m, 268, gSize, 14, ES_AUTOHSCROLL
+  EDITTEXT  IDE_COMPRESS_PARAMETERS, m, 268, gSize - bxs - 4, 14, ES_AUTOHSCROLL
+  // shown only for formats whose DLL exports GetFormatOptions(); the edit is widened otherwise
+  PUSHBUTTON  "Format options...", IDB_COMPRESS_FORMAT_OPTIONS, m + gSize - bxs, 268, bxs, 14
 
   PUSHBUTTON  "Options", IDB_COMPRESS_OPTIONS, m, 292, bxs, bys
   LTEXT     "", IDT_COMPRESS_OPTIONS, m + bxs + m, 294, gSize - bxs - m, 16, SS_NOPREFIX
@@ -231,3 +233,4 @@ END
 
 
 #include "CompressOptionsDialog.rc"
+#include "FormatOptionsDialog.rc"

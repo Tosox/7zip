@@ -11,6 +11,7 @@
 #include "../../../Windows/FileName.h"
 #include "../../../Windows/Thread.h"
 
+#include "../Common/FormatOptions.h"
 #include "../Common/WorkDir.h"
 
 #include "../Explorer/MyMessages.h"
@@ -140,7 +141,7 @@ static void AddProp_BoolPair(CObjectVector<CProperty> &properties,
 
 static void SplitOptionsToStrings(const UString &src, UStringVector &strings)
 {
-  SplitString(src, strings);
+  SplitQuotedOptions(src, strings); // fork: "..." keeps values with spaces together
   FOR_VECTOR (i, strings)
   {
     UString &s = strings[i];
